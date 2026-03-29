@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Réinitialiser la liste déroulante des activités
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,12 +23,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Générer la liste des participants avec icône de suppression
+        let participantsHTML = "";
+        if (details.participants && details.participants.length > 0) {
+          participantsHTML = `
+            <div class="participants-section">
+              <strong>Participants inscrits :</strong>
+              <ul class="participants-list no-bullets">
+                ${details.participants.map(p => `
+                  <li class="participant-item">
+                    <span class="participant-email">${p}</span>
+                    <span class="delete-participant" title="Désinscrire" data-activity="${name}" data-email="${p}">🗑️</span>
+                  </li>
+                `).join("")}
+              </ul>
+            </div>
+          `;
+        } else {
+          participantsHTML = `
+            <div class="participants-section empty">
+              <em>Aucun participant inscrit pour le moment.</em>
+            </div>
+          `;
+        }
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
         `;
+
 
         activitiesList.appendChild(activityCard);
 
@@ -35,6 +64,37 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+    // Ajouter les gestionnaires d'événements pour les icônes de suppression
+    document.querySelectorAll(".delete-participant").forEach(icon => {
+      icon.addEventListener("click", async (e) => {
+        const activity = icon.getAttribute("data-activity");
+        const email = icon.getAttribute("data-email");
+        if (confirm(`Désinscrire ${email} de ${activity} ?`)) {
+          try {
+            const response = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`, {
+              method: "DELETE"
+            });
+            const result = await response.json();
+            if (response.ok) {
+              fetchActivities();
+              messageDiv.textContent = result.message;
+              messageDiv.className = "success";
+            } else {
+              messageDiv.textContent = result.detail || "Erreur lors de la désinscription.";
+              messageDiv.className = "error";
+            }
+            messageDiv.classList.remove("hidden");
+            setTimeout(() => {
+              messageDiv.classList.add("hidden");
+            }, 5000);
+          } catch (err) {
+            messageDiv.textContent = "Erreur réseau lors de la désinscription.";
+            messageDiv.className = "error";
+            messageDiv.classList.remove("hidden");
+          }
+        }
+      });
+    });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
@@ -62,6 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities(); // Rafraîchir la liste des activités après inscription
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
